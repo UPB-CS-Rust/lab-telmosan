@@ -5,17 +5,23 @@
 pub enum LocalStorageVec<T, const N: usize> {
     // TODO add some variants containing data
     // to make the compiler happy
+    Stack {
+        buf: [T; N], 
+        len: usize, 
+    },
+
+    Heap(Vec<T>),
 }
 
-// **Below `From` implementation is used in the tests and are therefore given. However,
+// **Below From implementation is used in the tests and are therefore given. However,
 // you should have a thorough look at it as they contain various new concepts.**
-// This implementation is generic not only over the type `T`, but also over the
-// constants `N` and 'M', allowing us to support conversions from arrays of any
-// length to `LocalStorageVec`s of with any stack buffer size.
+// This implementation is generic not only over the type T, but also over the
+// constants N and 'M', allowing us to support conversions from arrays of any
+// length to LocalStorageVecs of with any stack buffer size.
 // In Rust, we call this feature 'const generics'
 impl<T, const N: usize, const M: usize> From<[T; N]> for LocalStorageVec<T, M>
 where
-    // We require that `T` implement `Default`, in case we need to fill up our
+    // We require that T implement Default, in case we need to fill up our
     // stack-based array without resorting to uninitialized memory. Once
     // we are more proficient in working with uninitialized memory, we'll be
     // able to remove this bound.
@@ -25,19 +31,19 @@ where
         if N <= M {
             // In this case, the passed array should fit on the stack.
 
-            // We crate an `Iterator` of the passed array,
+            // We crate an Iterator of the passed array,
             let mut it = array.into_iter();
             Self::Stack {
                 // This is a trick for copying an array into another one that's
                 // at least as long as the original, without having to create
-                // default values more than strictly necessary. The `[(); M]`
+                // default values more than strictly necessary. The [(); M]
                 // array is zero-sized, meaning there's no cost to instantiate it.
-                // The `map` call iterates over each of its items, and maps them to
-                // the next item from the `array` passed to this function. If there
-                // are no more items left from `array`, we insert the default specified
-                // for `T`
+                // The map call iterates over each of its items, and maps them to
+                // the next item from the array passed to this function. If there
+                // are no more items left from array, we insert the default specified
+                // for T
                 buf: [(); M].map(|_| it.next().unwrap_or_default()),
-                // The length of the buffer on stack is the length of the original `array`: `N`
+                // The length of the buffer on stack is the length of the original array: N
                 len: N,
             }
         } else {
@@ -47,20 +53,47 @@ where
     }
 }
 
+//Pentru partea B
+impl<T, const N: usize> From<Vec<T>> for LocalStorageVec<T, N> {
+    fn from(vec: Vec<T>) -> Self {
+        Self::Heap(vec)
+    }
+}
+
+//AsRef e AsMut -- parte c
+impl<T, const N: usize> AsRef<[T]> for LocalStorageVec<T, N> {
+    fn as_ref(&self) -> &[T] {
+        match self {
+            LocalStorageVec::Stack { buf, len } => &buf[0..*len],
+            LocalStorageVec::Heap(vec) => vec.as_ref(),
+        }
+    }
+}
+
+impl<T, const N: usize> AsMut<[T]> for LocalStorageVec<T, N> {
+    fn as_mut(&mut self) -> &mut [T] {
+        match self {
+            LocalStorageVec::Stack { buf, len } => &mut buf[0..*len],
+            LocalStorageVec::Heap(vec) => vec.as_mut(),
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod test {
     use crate::LocalStorageVec;
 
     #[test]
     // Don't remove the #[ignore] attribute or your tests will take forever!
-    #[ignore = "This test is just to validate the definition of `LocalStorageVec`. If it compiles, all is OK"]
+    #[ignore = "This test is just to validate the definition of LocalStorageVec. If it compiles, all is OK"]
     #[allow(unreachable_code, unused_variables)]
     fn it_compiles() {
         // Here's a trick to 'initialize' a type while not actually
-        // creating a value: an infinite `loop` expression diverges
-        // and evaluates to the 'never type' `!`, which, as is can never
+        // creating a value: an infinite loop expression diverges
+        // and evaluates to the 'never type' !, which, as is can never
         // actually be instantiated, coerces to any other type.
-        // Some other ways of diverging are by calling the `panic!` or the `todo!`
+        // Some other ways of diverging are by calling the panic! or the todo!
         // macros.
         // More info:
         // - https://doc.rust-lang.org/rust-by-example/fn/diverging.html
@@ -77,43 +110,45 @@ mod test {
         }
     }
 
+
+
     // Uncomment me for part B
-    // #[test]
-    // fn it_from_vecs() {
-    //     // The `vec!` macro creates a `Vec<T>` in a way that resembles
+     #[test]
+     fn it_from_vecs() {
+    //     // The vec! macro creates a Vec<T> in a way that resembles
     //     // array-initialization syntax.
-    //     let vec: LocalStorageVec<usize, 10> = LocalStorageVec::from(vec![1, 2, 3]);
-    //     // Assert that the call to `from` indeed yields a `Heap` variant
-    //     assert!(matches!(vec, LocalStorageVec::Heap(_)));
-    //
-    //     let vec: LocalStorageVec<usize, 2> = LocalStorageVec::from(vec![1, 2, 3]);
-    //
-    //     assert!(matches!(vec, LocalStorageVec::Heap(_)));
-    // }
+         let vec: LocalStorageVec<usize, 10> = LocalStorageVec::from(vec![1, 2, 3]);
+    //     // Assert that the call to from indeed yields a Heap variant
+         assert!(matches!(vec, LocalStorageVec::Heap(_)));
+    
+         let vec: LocalStorageVec<usize, 2> = LocalStorageVec::from(vec![1, 2, 3]);
+    
+         assert!(matches!(vec, LocalStorageVec::Heap(_)));
+     }
 
     // Uncomment me for part C
-    // #[test]
-    // fn it_as_refs() {
-    //     let vec: LocalStorageVec<i32, 256> = LocalStorageVec::from([0; 128]);
-    //     let slice: &[i32] = vec.as_ref();
-    //     assert!(slice.len() == 128);
-    //     let vec: LocalStorageVec<i32, 32> = LocalStorageVec::from([0; 128]);
-    //     let slice: &[i32] = vec.as_ref();
-    //     assert!(slice.len() == 128);
+     #[test]
+     fn it_as_refs() {
+        let vec: LocalStorageVec<i32, 256> = LocalStorageVec::from([0; 128]);
+        let slice: &[i32] = vec.as_ref();
+        assert!(slice.len() == 128);
+        let vec: LocalStorageVec<i32, 32> = LocalStorageVec::from([0; 128]);
+         let slice: &[i32] = vec.as_ref();
+        assert!(slice.len() == 128);
     //
-    //     let mut vec: LocalStorageVec<i32, 256> = LocalStorageVec::from([0; 128]);
-    //     let slice_mut: &[i32] = vec.as_mut();
-    //     assert!(slice_mut.len() == 128);
-    //     let mut vec: LocalStorageVec<i32, 32> = LocalStorageVec::from([0; 128]);
-    //     let slice_mut: &[i32] = vec.as_mut();
-    //     assert!(slice_mut.len() == 128);
-    // }
+       let mut vec: LocalStorageVec<i32, 256> = LocalStorageVec::from([0; 128]);
+         let slice_mut: &[i32] = vec.as_mut();
+         assert!(slice_mut.len() == 128);
+         let mut vec: LocalStorageVec<i32, 32> = LocalStorageVec::from([0; 128]);
+         let slice_mut: &[i32] = vec.as_mut();
+         assert!(slice_mut.len() == 128);
+     }
 
     // Uncomment me for part D
     // #[test]
     // fn it_constructs() {
     //     let vec: LocalStorageVec<usize, 10> = LocalStorageVec::new();
-    //     // Assert that the call to `new` indeed yields a `Stack` variant with zero length
+    //     // Assert that the call to new indeed yields a Stack variant with zero length
     //     assert!(matches!(vec, LocalStorageVec::Stack { buf: _, len: 0 }));
     // }
 
@@ -263,7 +298,7 @@ mod test {
     //     ]);
     //     let iter = vec.iter();
     //     for _ in iter {}
-    //     // This requires the `vec` not to be consumed by the call to `iter()`
+    //     // This requires the vec not to be consumed by the call to iter()
     //     drop(vec);
     // }
 
@@ -272,7 +307,7 @@ mod test {
     // fn it_derefs() {
     //     use std::ops::{Deref, DerefMut};
     //     let vec: LocalStorageVec<_, 128> = LocalStorageVec::from([0; 128]);
-    //     // `chunks` is a method that's defined for slices `[T]`, that we can use thanks to `Deref`
+    //     // chunks is a method that's defined for slices [T], that we can use thanks to Deref
     //     let chunks = vec.chunks(4);
     //     let slice: &[_] = vec.deref();
     //
